@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OmniPredict | Multi-Sport Probabilistic Prediction Platform</title>
+  <meta name="description" content="Production-quality multi-sport probabilistic prediction platform for Football, Basketball, and Tennis with calibrated probabilities and zero data leakage.">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-logo">
+          <span class="logo-icon">⚡</span>
+        </div>
+        <div class="brand-text">
+          <h1>OmniPredict</h1>
+          <span class="tag">PROBABILISTIC ML</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-item active" data-tab="predictions" id="nav-predict">
+          <span class="icon">🔮</span> Generate Prediction
+        </button>
+        <button class="nav-item" data-tab="upcoming" id="nav-upcoming">
+          <span class="icon">📅</span> Upcoming Matches
+        </button>
+        <button class="nav-item" data-tab="manual-entry" id="nav-entry">
+          <span class="icon">📝</span> Add Completed Match
+        </button>
+        <button class="nav-item" data-tab="historical" id="nav-historical">
+          <span class="icon">📜</span> Historical Predictions
+        </button>
+        <button class="nav-item" data-tab="models" id="nav-models">
+          <span class="icon">📊</span> Model Performance
+        </button>
+        <button class="nav-item" data-tab="features" id="nav-features">
+          <span class="icon">🧬</span> Feature Analysis
+        </button>
+        <button class="nav-item" data-tab="training" id="nav-training">
+          <span class="icon">🚀</span> Continuous Learning
+        </button>
+        <button class="nav-item" data-tab="system" id="nav-system">
+          <span class="icon">🛡️</span> Data & Quality Audit
+        </button>
+      </nav>
+
+      <div class="system-status-card">
+        <div class="status-indicator online"></div>
+        <div class="status-info">
+          <span class="label">Forecasting Engine</span>
+          <span class="val" id="db-match-count">14,090 Verified Matches</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <header class="topbar">
+        <div class="sport-selector">
+          <button class="sport-btn active" data-sport="football" id="sport-fb">
+            ⚽ Football
+          </button>
+          <button class="sport-btn" data-sport="tennis" id="sport-tn">
+            🎾 Tennis
+          </button>
+          <button class="sport-btn" data-sport="basketball" id="sport-bb">
+            🏀 Basketball
+          </button>
+        </div>
+        <div class="header-badges">
+          <span class="badge verified">✓ Zero Data Leakage</span>
+          <span class="badge calibrated">✓ Isotonic Calibrated</span>
+        </div>
+      </header>
+
+      <!-- TAB 1: PREDICTIONS -->
+      <section id="tab-predictions" class="tab-pane active">
+        <div class="hero-header">
+          <h2>Predict Match Probabilities</h2>
+          <p>Extracts strictly pre-match historical records, applies time-stamped feature transformations, and infers calibrated probability distributions.</p>
+        </div>
+
+        <div class="prediction-grid">
+          <!-- Prediction Form Card -->
+          <div class="card glass-card">
+            <div class="card-header">
+              <h3 id="pred-card-title">Fixture Configuration</h3>
+              <span class="market-badge" id="active-market-badge">Match Result (1X2)</span>
+            </div>
+
+            <form id="prediction-form" class="form-grid">
+              <div class="form-group full-width">
+                <label for="market-select">Prediction Market</label>
+                <select id="market-select" class="input-select"></select>
+              </div>
+
+              <div class="form-group">
+                <label id="lbl-participant-a" for="participant-a">Home Team</label>
+                <input type="text" id="participant-a" class="input-text" placeholder="e.g. Arsenal" required>
+              </div>
+
+              <div class="form-group">
+                <label id="lbl-participant-b" for="participant-b">Away Team</label>
+                <input type="text" id="participant-b" class="input-text" placeholder="e.g. Chelsea" required>
+              </div>
+
+              <div id="tennis-extra-fields" class="form-group full-width" style="display: none;">
+                <div class="subgrid">
+                  <div class="form-group">
+                    <label for="tennis-surface">Court Surface</label>
+                    <select id="tennis-surface" class="input-select">
+                      <option value="Hard">Hard Court</option>
+                      <option value="Clay">Clay Court</option>
+                      <option value="Grass">Grass Court</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label for="tennis-round">Tournament Round</label>
+                    <select id="tennis-round" class="input-select">
+                      <option value="Final">Final</option>
+                      <option value="SF">Semi-Final</option>
+                      <option value="QF">Quarter-Final</option>
+                      <option value="R16">Round of 16</option>
+                      <option value="R32">Round of 32</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-actions full-width">
+                <button type="submit" class="btn btn-primary" id="btn-run-prediction">
+                  <span>⚡ Calculate Probabilities</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Prediction Result Display -->
+          <div class="card glass-card result-card" id="result-container">
+            <div class="empty-state" id="result-empty">
+              <div class="pulse-icon">🔮</div>
+              <h4>Awaiting Match Parameters</h4>
+              <p>Select participants and submit to generate calibrated probability distributions.</p>
+            </div>
+
+            <div class="result-display" id="result-content" style="display: none;">
+              <div class="result-header">
+                <div>
+                  <span class="sport-tag" id="res-sport-tag">FOOTBALL</span>
+                  <h3 id="res-fixture-title">Team A vs Team B</h3>
+                  <span class="market-sub" id="res-market-title">Market Result</span>
+                </div>
+                <div class="quality-badge" id="res-quality-badge">DATA QUALITY: HIGH</div>
+              </div>
+
+              <!-- Probability Bar Section -->
+              <div class="prob-section">
+                <h4>Calibrated Probability Distribution</h4>
+                <div class="multi-prob-bar" id="multi-prob-bar"></div>
+                <div class="prob-legend" id="prob-legend"></div>
+              </div>
+
+              <!-- Top Contributing Features -->
+              <div class="features-section">
+                <h4>Top Contributing Features <span class="subtext">(Statistical Associations)</span></h4>
+                <div class="features-list" id="features-list"></div>
+              </div>
+
+              <!-- Model Metadata Footer -->
+              <div class="result-footer">
+                <span id="res-model-info">Model: Calibrated Ensemble</span>
+                <span id="res-timestamp">Timestamp: Just now</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 2: MANUAL DATA ENTRY -->
+      <section id="tab-manual-entry" class="tab-pane">
+        <div class="hero-header">
+          <h2>Manual Match Ingestion</h2>
+          <p>Record verified completed match results with optional sport-specific in-game statistics. Unknown statistics remain <code>NULL</code> and are never coerced to zero.</p>
+        </div>
+
+        <div class="card glass-card max-w-form">
+          <form id="manual-match-form">
+            <div class="form-section-header">
+              <h3>Core Match Information <span class="required-flag">(REQUIRED)</span></h3>
+            </div>
+            <div class="form-grid">
+              <div class="form-group">
+                <label for="entry-sport">Sport</label>
+                <select id="entry-sport" class="input-select">
+                  <option value="football">Football / Soccer</option>
+                  <option value="tennis">Tennis</option>
+                  <option value="basketball">Basketball</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label for="entry-competition">Competition / League / Event</label>
+                <input type="text" id="entry-competition" class="input-text" placeholder="e.g. Premier League, ATP Masters, NBA" required>
+              </div>
+
+              <div class="form-group">
+                <label for="entry-date">Event Date (UTC)</label>
+                <input type="datetime-local" id="entry-date" class="input-text" required>
+              </div>
+
+              <div class="form-group">
+                <label for="entry-season">Season</label>
+                <input type="text" id="entry-season" class="input-text" placeholder="e.g. 2024" required>
+              </div>
+
+              <div class="form-group">
+                <label id="lbl-entry-part-a" for="entry-part-a">Home Team / Player 1</label>
+                <input type="text" id="entry-part-a" class="input-text" placeholder="Participant A" required>
+              </div>
+
+              <div class="form-group">
+                <label id="lbl-entry-part-b" for="entry-part-b">Away Team / Player 2</label>
+                <input type="text" id="entry-part-b" class="input-text" placeholder="Participant B" required>
+              </div>
+
+              <div class="form-group">
+                <label id="lbl-entry-score-a" for="entry-score-a">Score A (Goals / Points / Sets)</label>
+                <input type="number" id="entry-score-a" class="input-text" min="0" placeholder="0" required>
+              </div>
+
+              <div class="form-group">
+                <label id="lbl-entry-score-b" for="entry-score-b">Score B (Goals / Points / Sets)</label>
+                <input type="number" id="entry-score-b" class="input-text" min="0" placeholder="0" required>
+              </div>
+            </div>
+
+            <!-- Dynamic Sport-Specific Stats -->
+            <div id="dynamic-stats-container">
+              <!-- Rendered via Javascript -->
+            </div>
+
+            <div class="form-actions full-width" style="margin-top: 1.5rem;">
+              <button type="submit" class="btn btn-primary" id="btn-save-match">
+                <span>💾 Save Match to Relational Database</span>
+              </button>
+            </div>
+            <div id="entry-alert" class="alert-box" style="display: none;"></div>
+          </form>
+        </div>
+      </section>
+
+      <!-- TAB 3: MODEL PERFORMANCE -->
+      <section id="tab-models" class="tab-pane">
+        <div class="hero-header">
+          <h2>Out-of-Sample Model Benchmarks</h2>
+          <p>Transparent evaluation across chronological holdout test sets. Models are evaluated on Log Loss, Brier Score, Accuracy, and Expected Calibration Error (ECE).</p>
+        </div>
+
+        <div class="card glass-card">
+          <div class="card-header">
+            <h3>Active Production Champions</h3>
+            <span class="badge verified">Strict Chronological Splits</span>
+          </div>
+
+          <div class="table-responsive">
+            <table class="data-table" id="models-table">
+              <thead>
+                <tr>
+                  <th>Sport</th>
+                  <th>Market</th>
+                  <th>Model Algorithm</th>
+                  <th>Version</th>
+                  <th>Test Log Loss</th>
+                  <th>Brier Score</th>
+                  <th>Accuracy</th>
+                  <th>Calibration</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="models-tbody">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: UPCOMING MATCHES -->
+      <section id="tab-upcoming" class="tab-pane">
+        <div class="hero-header">
+          <h2>Upcoming Scheduled Fixtures</h2>
+          <p>Upcoming fixtures with pre-match odds calculation. Click 'Predict' to run instant probability inference.</p>
+        </div>
+        <div class="card glass-card">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Sport</th>
+                  <th>Competition</th>
+                  <th>Participant A</th>
+                  <th>Participant B</th>
+                  <th>Context</th>
+                  <th>Date</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody id="upcoming-tbody">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: HISTORICAL PREDICTIONS -->
+      <section id="tab-historical" class="tab-pane">
+        <div class="hero-header">
+          <h2>Logged Predictions History</h2>
+          <p>Chronological audit log of all predictions generated by the platform with outcome tracking.</p>
+        </div>
+        <div class="card glass-card">
+          <div class="table-responsive">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Sport</th>
+                  <th>Market</th>
+                  <th>Matchup</th>
+                  <th>Predicted</th>
+                  <th>Probabilities</th>
+                  <th>Data Quality</th>
+                </tr>
+              </thead>
+              <tbody id="historical-tbody">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: FEATURE ANALYSIS -->
+      <section id="tab-features" class="tab-pane">
+        <div class="hero-header">
+          <h2>Pre-Match Feature Engineering & Explainability</h2>
+          <p>Features are computed strictly prior to match kickoff. No post-match or future information is permitted.</p>
+        </div>
+
+        <div class="audit-grid">
+          <div class="card glass-card">
+            <h3>⚽ Football Features</h3>
+            <ul class="audit-list">
+              <li><span>Team Elo:</span> <strong>Dynamic ratings with +65 Home advantage</strong></li>
+              <li><span>Form Windows:</span> <strong>Last 3, 5, 10 matches (points, goals for/against)</strong></li>
+              <li><span>Home/Away Splits:</span> <strong>Home team home form & away team away form</strong></li>
+              <li><span>Attack & Defense:</span> <strong>Shots, shots on target, corners, goals per game</strong></li>
+              <li><span>Schedule Context:</span> <strong>Rest days, matches in last 7 and 14 days</strong></li>
+            </ul>
+          </div>
+
+          <div class="card glass-card">
+            <h3>🎾 Tennis Features</h3>
+            <ul class="audit-list">
+              <li><span>Player Elo:</span> <strong>Overall Elo + Surface Elo (Hard, Clay, Grass)</strong></li>
+              <li><span>Surface Form:</span> <strong>Surface win rate over last 5 & 10 matches</strong></li>
+              <li><span>Serve & Return:</span> <strong>1st serve in %, 1st/2nd serve won, break points</strong></li>
+              <li><span>Fatigue Index:</span> <strong>Recent match duration & rest days</strong></li>
+              <li><span>Head-to-Head:</span> <strong>Strict pre-match historical H2H record</strong></li>
+            </ul>
+          </div>
+
+          <div class="card glass-card">
+            <h3>🏀 Basketball Features</h3>
+            <ul class="audit-list">
+              <li><span>Team Elo:</span> <strong>Dynamic ratings with +80 Home court advantage</strong></li>
+              <li><span>Offensive Rating:</span> <strong>Estimated ORtg, eFG%, 3P%, FT%</strong></li>
+              <li><span>Defensive Rating:</span> <strong>DRtg and opponent points allowed</strong></li>
+              <li><span>Pace & Possession:</span> <strong>Estimated pace, assist rate, turnover rate</strong></li>
+              <li><span>Fatigue:</span> <strong>Back-to-back indicator & rest days</strong></li>
+            </ul>
+          </div>
+
+          <div class="card glass-card">
+            <h3>⚠️ Statistical Attribution Note</h3>
+            <p style="color: var(--text-muted); font-size: 0.9rem; line-height: 1.6;">
+              Feature attributions represent predictive associations derived from historical data. They do <strong>not</strong> imply physical causation. Feature contributions are normalized and time-stamped.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB: CONTINUOUS LEARNING -->
+      <section id="tab-training" class="tab-pane">
+        <div class="hero-header">
+          <h2>Continuous Learning & Model Promotion</h2>
+          <p>Candidate models are evaluated via chronological walk-forward backtesting and only promoted if they outperform production.</p>
+        </div>
+
+        <div class="prediction-grid">
+          <div class="card glass-card">
+            <h3>Trigger Candidate Model Training</h3>
+            <p style="color: var(--text-muted); font-size: 0.88rem; margin-bottom: 1.25rem;">
+              Retrain and validate candidate models on newly ingested historical data without overwriting the production version.
+            </p>
+            <div class="form-grid">
+              <div class="form-group full-width">
+                <label>Target Market</label>
+                <select id="train-market-select" class="input-select">
+                  <option value="football_1x2">Football: Match Result (1X2)</option>
+                  <option value="football_over_under_2_5">Football: Over/Under 2.5</option>
+                  <option value="football_btts">Football: Both Teams To Score</option>
+                  <option value="tennis_match_winner">Tennis: Match Winner</option>
+                  <option value="tennis_set_betting">Tennis: Set Betting</option>
+                  <option value="basketball_moneyline">Basketball: Moneyline</option>
+                  <option value="basketball_total_points">Basketball: Total Points</option>
+                </select>
+              </div>
+              <button type="button" class="btn btn-primary" id="btn-trigger-training" style="margin-top: 1rem;">
+                🚀 Launch Candidate Training Run
+              </button>
+            </div>
+          </div>
+
+          <div class="card glass-card">
+            <h3>Training Pipeline Status</h3>
+            <div id="training-status-box" style="margin-top: 1rem; color: var(--text-muted); font-size: 0.9rem;">
+              No active training run. Click 'Launch Candidate Training Run' to start walk-forward validation.
+            </div>
+          </div>
+        </div>
+      </section>
+
+
+      <!-- TAB 4: SYSTEM & DATA AUDIT -->
+      <section id="tab-system" class="tab-pane">
+        <div class="hero-header">
+          <h2>Data Quality & Anti-Leakage Audit</h2>
+          <p>Point-in-time temporal verification, canonical identity resolution stats, and database integrity telemetry.</p>
+        </div>
+
+        <div class="audit-grid">
+          <div class="card glass-card">
+            <h3>Verified Data Volume</h3>
+            <ul class="audit-list">
+              <li><span>⚽ Football Matches:</span> <strong>4,338 records</strong></li>
+              <li><span>🎾 Tennis ATP Matches:</span> <strong>8,593 records</strong></li>
+              <li><span>🏀 Basketball Games:</span> <strong>1,159 records</strong></li>
+              <li><span>Total Stored Matches:</span> <strong>14,090 verified</strong></li>
+            </ul>
+          </div>
+
+          <div class="card glass-card">
+            <h3>Anti-Leakage Safeguards</h3>
+            <ul class="audit-list">
+              <li><span>Temporal Cut Rule:</span> <span class="badge-success">ACTIVE (t_feature &lt; t_match)</span></li>
+              <li><span>Target Leakage Check:</span> <span class="badge-success">PASSED</span></li>
+              <li><span>Future Record Lock:</span> <span class="badge-success">ENFORCED</span></li>
+              <li><span>Zero-Imputation Policy:</span> <span class="badge-success">ENFORCED (NULL preserved)</span></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

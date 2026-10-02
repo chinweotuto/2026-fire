@@ -1,0 +1,35 @@
+[project]
+name = "sports-prediction-platform"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.142.2",
+    "httpx>=0.28.1",
+    "joblib>=1.6.0",
+    "lightgbm>=4.7.0",
+    "numpy>=2.4.6",
+    "pandas>=3.0.6",
+    "pydantic>=2.13.5",
+    "pydantic-settings>=2.15.0",
+    "pytest>=9.1.1",
+    "python-dotenv>=1.2.4",
+    "scikit-learn>=1.9.1",
+    "scipy>=1.17.1",
+    "sqlalchemy>=2.1.2",
+    "uvicorn[standard]>=0.54.0",
+    "xgboost>=3.2.0",
+]
+
+[project.scripts]
+sports-prediction-platform = "sports_prediction_platform:main"
+
+[build-system]
+requires = ["uv_build>=0.12.22,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+
