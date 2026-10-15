@@ -1,19 +1,107 @@
-"""Probability Calibration Engine (Platt Sigmoid & Isotonic Regression)."""
+"""Probability Calibration Engine (Platt Sigmoid, Isotonic Regression, Temperature Scaling, and Dirichlet Vector Scaling)."""
 
 import numpy as np
 from typing import Dict, Any, List, Optional
+from scipy.optimize import minimize
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import log_loss
 from src.models.base import BaseSportModel
+
+
+class TemperatureScalingCalibrator:
+    """Optimizes a single temperature scalar T > 0 on validation log-odds: Softmax(z / T)."""
+
+    def __init__(self):
+        self.temperature: float = 1.0
+
+    def fit(self, probs: np.ndarray, y: np.ndarray, classes: np.ndarray) -> "TemperatureScalingCalibrator":
+        eps = 1e-7
+        probs = np.clip(probs, eps, 1.0 - eps)
+        logits = np.log(probs)
+
+        # Convert y to class indices
+        class_to_idx = {c: i for i, c in enumerate(classes)}
+        y_indices = np.array([class_to_idx[val] for val in y])
+
+        def loss_fn(T: np.ndarray) -> float:
+            t_val = max(0.05, float(T[0]))
+            scaled_logits = logits / t_val
+            # Softmax
+            exp_logits = np.exp(scaled_logits - np.max(scaled_logits, axis=1, keepdims=True))
+            softmax_probs = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+            return float(log_loss(y_indices, softmax_probs, labels=list(range(len(classes)))))
+
+        res = minimize(loss_fn, np.array([1.0]), method="Nelder-Mead", bounds=[(0.1, 10.0)])
+        if res.success:
+            self.temperature = max(0.05, float(res.x[0]))
+        return self
+
+    def transform(self, probs: np.ndarray) -> np.ndarray:
+        eps = 1e-7
+        probs = np.clip(probs, eps, 1.0 - eps)
+        logits = np.log(probs)
+        scaled_logits = logits / self.temperature
+        exp_logits = np.exp(scaled_logits - np.max(scaled_logits, axis=1, keepdims=True))
+        softmax_probs = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+        return softmax_probs
+
+
+class VectorScalingCalibrator:
+    """Multi-class Vector / Diagonal Dirichlet Scaling: Softmax(W * log(p) + b)."""
+
+    def __init__(self):
+        self.weights: Optional[np.ndarray] = None
+        self.bias: Optional[np.ndarray] = None
+
+    def fit(self, probs: np.ndarray, y: np.ndarray, classes: np.ndarray) -> "VectorScalingCalibrator":
+        eps = 1e-7
+        probs = np.clip(probs, eps, 1.0 - eps)
+        log_p = np.log(probs)
+        n_classes = len(classes)
+
+        class_to_idx = {c: i for i, c in enumerate(classes)}
+        y_indices = np.array([class_to_idx[val] for val in y])
+
+        # Optimize diagonal weights and biases with L2 regularization
+        def loss_fn(params: np.ndarray) -> float:
+            w = params[:n_classes]
+            b = params[n_classes:]
+            scaled = log_p * w + b
+            exp_s = np.exp(scaled - np.max(scaled, axis=1, keepdims=True))
+            p_cal = exp_s / np.sum(exp_s, axis=1, keepdims=True)
+            l2_reg = 0.001 * np.sum((w - 1.0) ** 2) + 0.001 * np.sum(b ** 2)
+            return float(log_loss(y_indices, p_cal, labels=list(range(n_classes)))) + l2_reg
+
+        init_params = np.concatenate([np.ones(n_classes), np.zeros(n_classes)])
+        res = minimize(loss_fn, init_params, method="L-BFGS-B")
+        if res.success:
+            self.weights = res.x[:n_classes]
+            self.bias = res.x[n_classes:]
+        else:
+            self.weights = np.ones(n_classes)
+            self.bias = np.zeros(n_classes)
+        return self
+
+    def transform(self, probs: np.ndarray) -> np.ndarray:
+        if self.weights is None:
+            return probs
+        eps = 1e-7
+        probs = np.clip(probs, eps, 1.0 - eps)
+        log_p = np.log(probs)
+        scaled = log_p * self.weights + self.bias
+        exp_s = np.exp(scaled - np.max(scaled, axis=1, keepdims=True))
+        return exp_s / np.sum(exp_s, axis=1, keepdims=True)
 
 
 class ProbabilityCalibrator:
     """Calibrates predicted probabilities to match true empirical frequencies."""
 
     def __init__(self, method: str = "isotonic"):
-        assert method in ("isotonic", "sigmoid"), f"Unsupported method: {method}"
+        assert method in ("isotonic", "sigmoid", "temperature", "vector"), f"Unsupported method: {method}"
         self.method = method
         self.calibrators: List[Any] = []
+        self.vector_calibrator: Optional[Any] = None
         self.classes_: np.ndarray = np.array([])
 
     def fit(self, probs: np.ndarray, y: np.ndarray, classes: np.ndarray) -> "ProbabilityCalibrator":
@@ -22,7 +110,11 @@ class ProbabilityCalibrator:
         n_classes = len(classes)
         self.calibrators = []
 
-        if n_classes == 2:
+        if self.method == "temperature":
+            self.vector_calibrator = TemperatureScalingCalibrator().fit(probs, y, classes)
+        elif self.method == "vector":
+            self.vector_calibrator = VectorScalingCalibrator().fit(probs, y, classes)
+        elif n_classes == 2:
             # Binary calibration
             y_binary = (y == classes[1]).astype(float)
             p1 = probs[:, 1]
@@ -50,10 +142,13 @@ class ProbabilityCalibrator:
 
     def transform(self, probs: np.ndarray) -> np.ndarray:
         """Apply calibration and project back onto the probability simplex."""
+        if self.method in ("temperature", "vector") and self.vector_calibrator is not None:
+            return self.vector_calibrator.transform(probs)
+
         n_samples, n_classes = probs.shape
         calibrated = np.zeros_like(probs)
 
-        if n_classes == 2:
+        if n_classes == 2 and self.calibrators:
             cal = self.calibrators[0]
             p1 = probs[:, 1]
             if self.method == "isotonic":
@@ -63,7 +158,7 @@ class ProbabilityCalibrator:
             p1_cal = np.clip(p1_cal, 0.001, 0.999)
             calibrated[:, 1] = p1_cal
             calibrated[:, 0] = 1.0 - p1_cal
-        else:
+        elif self.calibrators:
             for i, cal in enumerate(self.calibrators):
                 p_c = probs[:, i]
                 if self.method == "isotonic":
@@ -75,6 +170,8 @@ class ProbabilityCalibrator:
             # Simplex projection (sum to 1.0)
             row_sums = calibrated.sum(axis=1, keepdims=True)
             calibrated = calibrated / np.where(row_sums == 0, 1.0, row_sums)
+        else:
+            return probs
 
         return calibrated
 
@@ -114,6 +211,7 @@ class CalibratedModelWrapper(BaseSportModel):
     def __init__(self, base_model: BaseSportModel, method: str = "isotonic"):
         super().__init__(name=f"{base_model.name}_calibrated_{method}")
         self.base_model = base_model
+        self.method = method
         self.calibrator = ProbabilityCalibrator(method=method)
 
     def fit(self, X: np.ndarray, y: np.ndarray, feature_names: Optional[List[str]] = None) -> "CalibratedModelWrapper":
@@ -132,6 +230,7 @@ class CalibratedModelWrapper(BaseSportModel):
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         raw_probs = self.base_model.predict_proba(X)
-        if self.calibrator.calibrators:
+        if self.calibrator.calibrators or self.calibrator.vector_calibrator is not None:
             return self.calibrator.transform(raw_probs)
         return raw_probs
+

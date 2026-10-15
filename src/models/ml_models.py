@@ -1,7 +1,7 @@
-"""Machine Learning Probabilistic Classifiers."""
+"""Machine Learning Probabilistic Classifiers with Walk-Forward Splitter."""
 
 import numpy as np
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Generator, Tuple
 from sklearn.linear_model import LogisticRegression
 from sklearn.ensemble import RandomForestClassifier, HistGradientBoostingClassifier
 from sklearn.preprocessing import StandardScaler
@@ -18,6 +18,26 @@ try:
     LGB_AVAILABLE = True
 except ImportError:
     LGB_AVAILABLE = False
+
+
+class TimeSeriesWalkForwardCV:
+    """Expanding-window chronological cross-validation splitter (purged walk-forward)."""
+
+    def __init__(self, n_splits: int = 4, min_train_ratio: float = 0.50):
+        self.n_splits = n_splits
+        self.min_train_ratio = min_train_ratio
+
+    def split(self, X: np.ndarray, y: Optional[np.ndarray] = None) -> Generator[Tuple[np.ndarray, np.ndarray], None, None]:
+        n_samples = len(X)
+        min_train = int(n_samples * self.min_train_ratio)
+        test_size = (n_samples - min_train) // self.n_splits
+
+        for i in range(self.n_splits):
+            train_end = min_train + i * test_size
+            test_end = train_end + test_size if i < self.n_splits - 1 else n_samples
+            train_idx = np.arange(0, train_end)
+            test_idx = np.arange(train_end, test_end)
+            yield train_idx, test_idx
 
 
 class LogisticRegressionModel(BaseSportModel):
@@ -88,19 +108,19 @@ class GradientBoostingProbModel(BaseSportModel):
 
 
 class XGBoostProbModel(BaseSportModel):
-    """XGBoost probabilistic classifier."""
+    """XGBoost probabilistic classifier with multi-class regularization and tree pruning."""
 
-    def __init__(self, learning_rate: float = 0.05, n_estimators: int = 120, max_depth: int = 4):
+    def __init__(self, learning_rate: float = 0.04, n_estimators: int = 140, max_depth: int = 4, subsample: float = 0.85):
         super().__init__(name="xgboost")
         self.learning_rate = learning_rate
         self.n_estimators = n_estimators
         self.max_depth = max_depth
+        self.subsample = subsample
         self.clf = None
 
     def fit(self, X: np.ndarray, y: np.ndarray, feature_names: Optional[List[str]] = None) -> "XGBoostProbModel":
         self.feature_names_ = feature_names or []
         self.classes_ = np.unique(y)
-        # Map classes to integers 0..K-1
         self.class_to_idx = {c: i for i, c in enumerate(self.classes_)}
         y_encoded = np.array([self.class_to_idx[val] for val in y])
 
@@ -109,13 +129,16 @@ class XGBoostProbModel(BaseSportModel):
                 learning_rate=self.learning_rate,
                 n_estimators=self.n_estimators,
                 max_depth=self.max_depth,
+                subsample=self.subsample,
+                colsample_bytree=0.85,
+                reg_alpha=0.1,
+                reg_lambda=1.0,
                 random_state=42,
                 eval_metric="mlogloss" if len(self.classes_) > 2 else "logloss",
                 verbosity=0
             )
             self.clf.fit(X, y_encoded)
         else:
-            # Fallback to HistGradientBoosting if compiled xgboost is absent
             self.clf = HistGradientBoostingClassifier(random_state=42)
             self.clf.fit(X, y)
 
@@ -125,3 +148,4 @@ class XGBoostProbModel(BaseSportModel):
         if XGB_AVAILABLE and hasattr(self, "class_to_idx"):
             return self.clf.predict_proba(X)
         return self.clf.predict_proba(X)
+

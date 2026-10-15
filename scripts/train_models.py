@@ -78,8 +78,29 @@ def train_market_model(db: Session, sport_id: str, market_id: str):
     ensemble.fit(X_train, y_train, feature_names=feature_names)
     ensemble.fit_weights(X_val, y_val)
 
-    # 2. Probability Calibration Layer (Isotonic on Validation Split)
-    calibrated_model = CalibratedModelWrapper(ensemble, method="isotonic").fit_calibration(X_val, y_val)
+    # 2. Probability Calibration Layer: Compare candidate calibration methods on validation data
+    candidate_methods = ["isotonic", "temperature", "vector", "sigmoid"]
+    best_method = "isotonic"
+    best_val_loss = float("inf")
+    best_calibrated_model = None
+
+    for method in candidate_methods:
+        try:
+            cand = CalibratedModelWrapper(ensemble, method=method).fit_calibration(X_val, y_val)
+            val_probs = cand.predict_proba(X_val)
+            cand_metrics = evaluate_predictions(y_val, val_probs, cand.classes_)
+            if cand_metrics["log_loss"] < best_val_loss:
+                best_val_loss = cand_metrics["log_loss"]
+                best_method = method
+                best_calibrated_model = cand
+        except Exception:
+            continue
+
+    if best_calibrated_model is None:
+        best_calibrated_model = CalibratedModelWrapper(ensemble, method="isotonic").fit_calibration(X_val, y_val)
+        best_method = "isotonic"
+
+    calibrated_model = best_calibrated_model
 
     # 3. Final out-of-sample evaluation on Test
     test_probs = calibrated_model.predict_proba(X_test)
@@ -87,6 +108,7 @@ def train_market_model(db: Session, sport_id: str, market_id: str):
 
     logger.info(
         f"Tiered Statistical + XGBoost Ensemble trained for {market_id}: "
+        f"Calibrator = {best_method}, "
         f"Test Log Loss = {test_metrics['log_loss']}, "
         f"Brier = {test_metrics['brier_score']}, "
         f"Accuracy = {test_metrics['accuracy'] * 100:.1f}%, "
@@ -119,7 +141,7 @@ def train_market_model(db: Session, sport_id: str, market_id: str):
         db.add(model_record)
         db.flush()
 
-    version_tag = f"v1.0.{int(datetime.now().timestamp()) % 10000}"
+    version_tag = f"v1.1.{int(datetime.now().timestamp()) % 10000}"
     model_ver = ModelVersion(
         version_id=f"ver_{market_id}_{version_tag}",
         model_id=model_record.model_id,
@@ -130,7 +152,7 @@ def train_market_model(db: Session, sport_id: str, market_id: str):
         validation_log_loss=test_metrics["log_loss"],
         validation_brier_score=test_metrics["brier_score"],
         validation_accuracy=test_metrics["accuracy"],
-        calibration_method="isotonic",
+        calibration_method=best_method,
         hyperparameters={"ensemble_weights": ensemble.weights_.tolist()},
         artifact_path=str(artifact_file),
         is_active=True,

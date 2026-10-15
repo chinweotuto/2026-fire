@@ -1,4 +1,4 @@
-"""Tennis Pre-Match Feature Engine."""
+"""Tennis Pre-Match Feature Engine with EWMA and Surface Dominance."""
 
 import math
 from datetime import datetime, timezone
@@ -8,9 +8,9 @@ from src.features.elo import TennisEloSystem
 
 
 class TennisFeatureEngine(BaseFeatureEngine):
-    """Generates 100% pre-match causal features for tennis matches."""
+    """Generates 100% pre-match causal features for tennis matches with EWMA and surface dominance."""
 
-    def __init__(self, version: str = "v1.0.0"):
+    def __init__(self, version: str = "v1.1.0"):
         super().__init__(sport_id="tennis", version=version)
         self.elo_system = TennisEloSystem()
 
@@ -34,13 +34,27 @@ class TennisFeatureEngine(BaseFeatureEngine):
             if not recent:
                 return {
                     "win_rate": 0.5, "first_serve_in": 0.62, "first_serve_won": 0.70,
-                    "second_serve_won": 0.50, "ace_rate": 0.08, "df_rate": 0.04
+                    "second_serve_won": 0.50, "ace_rate": 0.08, "df_rate": 0.04,
+                    "ewma_win": 0.50, "serve_dominance": 1.15, "recent_sets_played": 6.0
                 }
 
             wins, svpt, first_in, first_won, second_won, aces, dfs = 0, 0, 0, 0, 0, 0, 0
-            for m in recent:
-                if m.winner_id == player_id:
+            ewma_wins, ewma_weight_total, total_sets = 0.0, 0.0, 0
+            n = len(recent)
+
+            for i, m in enumerate(recent):
+                is_win = (m.winner_id == player_id)
+                if is_win:
                     wins += 1
+
+                w = 0.85 ** (n - 1 - i)
+                ewma_wins += w * (1.0 if is_win else 0.0)
+                ewma_weight_total += w
+
+                s_a = m.score_a or 0
+                s_b = m.score_b or 0
+                total_sets += (s_a + s_b)
+
                 if m.tennis_stats:
                     st = m.tennis_stats
                     is_p1 = (m.participant_a_id == player_id)
@@ -58,18 +72,26 @@ class TennisFeatureEngine(BaseFeatureEngine):
                     aces += s_ace
                     dfs += s_df
 
-            n = len(recent)
             svpt_denom = max(1, svpt)
             first_in_denom = max(1, first_in)
             second_denom = max(1, svpt - first_in)
+            ewma_denom = max(1e-5, ewma_weight_total)
+
+            p_1in = first_in / svpt_denom
+            p_1won = first_won / first_in_denom
+            p_2won = second_won / second_denom
+            serve_dominance = (p_1in * p_1won) + ((1.0 - p_1in) * p_2won)
 
             return {
                 "win_rate": wins / n,
-                "first_serve_in": first_in / svpt_denom,
-                "first_serve_won": first_won / first_in_denom,
-                "second_serve_won": second_won / second_denom,
+                "first_serve_in": p_1in,
+                "first_serve_won": p_1won,
+                "second_serve_won": p_2won,
                 "ace_rate": aces / svpt_denom,
-                "df_rate": dfs / svpt_denom
+                "df_rate": dfs / svpt_denom,
+                "ewma_win": ewma_wins / ewma_denom,
+                "serve_dominance": serve_dominance * 2.0,
+                "recent_sets_played": float(total_sets)
             }
 
         p1_form_5 = get_player_form(p1_id, p1_matches, 5)
@@ -118,6 +140,12 @@ class TennisFeatureEngine(BaseFeatureEngine):
             "p1_win_rate_last_10": p1_form_10["win_rate"],
             "p2_win_rate_last_5": p2_form_5["win_rate"],
             "p2_win_rate_last_10": p2_form_10["win_rate"],
+            "p1_ewma_win_rate": p1_form_5["ewma_win"],
+            "p2_ewma_win_rate": p2_form_5["ewma_win"],
+            "p1_serve_dominance": p1_form_10["serve_dominance"],
+            "p2_serve_dominance": p2_form_10["serve_dominance"],
+            "p1_recent_sets": p1_form_5["recent_sets_played"],
+            "p2_recent_sets": p2_form_5["recent_sets_played"],
             "p1_surface_win_rate": p1_surf_wr,
             "p2_surface_win_rate": p2_surf_wr,
             "surface_win_rate_diff": p1_surf_wr - p2_surf_wr,
@@ -184,3 +212,4 @@ class TennisFeatureEngine(BaseFeatureEngine):
             p2_m,
             as_of_timestamp
         )
+

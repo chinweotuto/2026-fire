@@ -1,5 +1,6 @@
-"""Football (Soccer) Pre-Match Feature Engine."""
+"""Football (Soccer) Pre-Match Feature Engine with EWMA and xG approximations."""
 
+import math
 from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional
 from src.features.base import BaseFeatureEngine
@@ -7,9 +8,9 @@ from src.features.elo import FootballEloSystem
 
 
 class FootballFeatureEngine(BaseFeatureEngine):
-    """Generates 100% pre-match causal features for football fixtures."""
+    """Generates 100% pre-match causal features for football fixtures with EWMA and xG."""
 
-    def __init__(self, version: str = "v1.0.0"):
+    def __init__(self, version: str = "v1.1.0"):
         super().__init__(sport_id="football", version=version)
         self.elo_system = FootballEloSystem()
 
@@ -32,11 +33,15 @@ class FootballFeatureEngine(BaseFeatureEngine):
             if not recent:
                 return {
                     "points": 1.2, "win_rate": 0.33, "goals_for": 1.2, "goals_against": 1.2,
-                    "shots": 12.0, "shots_on_target": 4.0, "shots_allowed": 12.0
+                    "shots": 12.0, "shots_on_target": 4.0, "shots_allowed": 12.0,
+                    "clean_sheets": 0.25, "xg_proxy": 1.30, "ewma_gf": 1.20, "ewma_ga": 1.20
                 }
 
-            pts, wins, gf, ga, shots, sot, s_allowed = 0, 0, 0, 0, 0, 0, 0
-            for m in recent:
+            pts, wins, gf, ga, shots, sot, s_allowed, cs = 0, 0, 0, 0, 0, 0, 0, 0
+            ewma_gf, ewma_ga, ewma_weight_total = 0.0, 0.0, 0.0
+            n = len(recent)
+
+            for i, m in enumerate(recent):
                 is_home = (m.participant_a_id == team_id)
                 t_score = m.score_a if is_home else m.score_b
                 opp_score = m.score_b if is_home else m.score_a
@@ -45,11 +50,20 @@ class FootballFeatureEngine(BaseFeatureEngine):
 
                 gf += t_score
                 ga += opp_score
+                if opp_score == 0:
+                    cs += 1
+
                 if t_score > opp_score:
                     pts += 3
                     wins += 1
                 elif t_score == opp_score:
                     pts += 1
+
+                # EWMA weight with decay alpha = 0.85
+                w = 0.85 ** (n - 1 - i)
+                ewma_gf += w * t_score
+                ewma_ga += w * opp_score
+                ewma_weight_total += w
 
                 if m.football_stats:
                     st = m.football_stats
@@ -61,15 +75,25 @@ class FootballFeatureEngine(BaseFeatureEngine):
                     sot += 4
                     s_allowed += 12
 
-            n = len(recent)
+            ewma_denom = max(1e-5, ewma_weight_total)
+            avg_sot = sot / n
+            avg_shots = shots / n
+            # Non-penalty xG proxy formula: 0.31 * sot + 0.045 * off_target
+            off_target = max(0.0, avg_shots - avg_sot)
+            xg_proxy = 0.31 * avg_sot + 0.045 * off_target
+
             return {
                 "points": pts / n,
                 "win_rate": wins / n,
                 "goals_for": gf / n,
                 "goals_against": ga / n,
-                "shots": shots / n,
-                "shots_on_target": sot / n,
-                "shots_allowed": s_allowed / n
+                "shots": avg_shots,
+                "shots_on_target": avg_sot,
+                "shots_allowed": s_allowed / n,
+                "clean_sheets": cs / n,
+                "xg_proxy": xg_proxy,
+                "ewma_gf": ewma_gf / ewma_denom,
+                "ewma_ga": ewma_ga / ewma_denom
             }
 
         h_stat_5 = get_team_stats(home_id, home_matches, 5)
@@ -141,6 +165,12 @@ class FootballFeatureEngine(BaseFeatureEngine):
             "home_shots_on_target_per_game": h_stat_10["shots_on_target"],
             "away_shots_per_game": a_stat_10["shots"],
             "away_shots_on_target_per_game": a_stat_10["shots_on_target"],
+            "home_clean_sheet_rate": h_stat_10["clean_sheets"],
+            "away_clean_sheet_rate": a_stat_10["clean_sheets"],
+            "home_xg_proxy": h_stat_5["xg_proxy"],
+            "away_xg_proxy": a_stat_5["xg_proxy"],
+            "home_ewma_goals_for": h_stat_5["ewma_gf"],
+            "away_ewma_goals_for": a_stat_5["ewma_gf"],
             "home_venue_points_last_5": h_venue_stats["points"],
             "away_venue_points_last_5": a_venue_stats["points"],
             "home_rest_days": home_rest,
@@ -189,3 +219,4 @@ class FootballFeatureEngine(BaseFeatureEngine):
             h2h,
             as_of_timestamp
         )
+

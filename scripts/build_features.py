@@ -54,6 +54,11 @@ def build_football_features(db: Session, engine: FootballFeatureEngine):
                 features_json=features
             ))
             saved_count += 1
+        else:
+            existing.features_version = engine.version
+            existing.feature_timestamp = m_date
+            existing.features_json = features
+            saved_count += 1
 
         # Advance state
         s_a = m.score_a if m.score_a is not None else 0
@@ -70,7 +75,7 @@ def build_football_features(db: Session, engine: FootballFeatureEngine):
             db.commit()
 
     db.commit()
-    logger.info(f"Finished Football features. Total new records: {saved_count}")
+    logger.info(f"Finished Football features. Total records processed: {saved_count}")
 
 
 def build_tennis_features(db: Session, engine: TennisFeatureEngine):
@@ -113,6 +118,11 @@ def build_tennis_features(db: Session, engine: TennisFeatureEngine):
                 features_json=features
             ))
             saved_count += 1
+        else:
+            existing.features_version = engine.version
+            existing.feature_timestamp = m_date
+            existing.features_json = features
+            saved_count += 1
 
         # Advance state
         w_id = m.winner_id
@@ -140,7 +150,7 @@ def build_tennis_features(db: Session, engine: TennisFeatureEngine):
             db.commit()
 
     db.commit()
-    logger.info(f"Finished Tennis features. Total new records: {saved_count}")
+    logger.info(f"Finished Tennis features. Total records processed: {saved_count}")
 
 
 def build_basketball_features(db: Session, engine: BasketballFeatureEngine):
@@ -178,6 +188,11 @@ def build_basketball_features(db: Session, engine: BasketballFeatureEngine):
                 features_json=features
             ))
             saved_count += 1
+        else:
+            existing.features_version = engine.version
+            existing.feature_timestamp = m_date
+            existing.features_json = features
+            saved_count += 1
 
         s_a = m.score_a if m.score_a is not None else 100
         s_b = m.score_b if m.score_b is not None else 100
@@ -191,7 +206,7 @@ def build_basketball_features(db: Session, engine: BasketballFeatureEngine):
             db.commit()
 
     db.commit()
-    logger.info(f"Finished Basketball features. Total new records: {saved_count}")
+    logger.info(f"Finished Basketball features. Total records processed: {saved_count}")
 
 
 def main():
@@ -207,3 +222,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+

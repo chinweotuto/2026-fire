@@ -1,4 +1,4 @@
-"""Basketball (NBA) Pre-Match Feature Engine."""
+"""Basketball (NBA) Pre-Match Feature Engine with EWMA and Four Factors."""
 
 from datetime import datetime, timezone
 from typing import Dict, List, Any
@@ -7,9 +7,9 @@ from src.features.elo import BasketballEloSystem
 
 
 class BasketballFeatureEngine(BaseFeatureEngine):
-    """Generates 100% pre-match causal features for basketball games."""
+    """Generates 100% pre-match causal features for basketball games with EWMA and Four Factors."""
 
-    def __init__(self, version: str = "v1.0.0"):
+    def __init__(self, version: str = "v1.1.0"):
         super().__init__(sport_id="basketball", version=version)
         self.elo_system = BasketballEloSystem()
 
@@ -32,12 +32,16 @@ class BasketballFeatureEngine(BaseFeatureEngine):
                 return {
                     "win_rate": 0.5, "pts_per_game": 110.0, "opp_pts": 110.0,
                     "efg_pct": 0.53, "tov_rate": 0.13, "pace": 98.0,
-                    "ortg": 112.0, "drtg": 112.0
+                    "ortg": 112.0, "drtg": 112.0, "net_rtg": 0.0,
+                    "ewma_pts": 110.0, "ewma_opp_pts": 110.0, "orb_pct": 0.25, "ft_rate": 0.20
                 }
 
             wins, total_pts, opp_pts = 0, 0, 0
             fgm, fga, fg3m, ftm, fta, tov, oreb, dreb = 0, 0, 0, 0, 0, 0, 0, 0
-            for m in recent:
+            ewma_pts, ewma_opp_pts, ewma_weight_total = 0.0, 0.0, 0.0
+            n = len(recent)
+
+            for i, m in enumerate(recent):
                 is_home = (m.participant_a_id == team_id)
                 t_score = m.score_a if is_home else m.score_b
                 o_score = m.score_b if is_home else m.score_a
@@ -48,6 +52,11 @@ class BasketballFeatureEngine(BaseFeatureEngine):
                 opp_pts += o_score
                 if t_score > o_score:
                     wins += 1
+
+                w = 0.85 ** (n - 1 - i)
+                ewma_pts += w * t_score
+                ewma_opp_pts += w * o_score
+                ewma_weight_total += w
 
                 if m.basketball_stats:
                     st = m.basketball_stats
@@ -69,16 +78,18 @@ class BasketballFeatureEngine(BaseFeatureEngine):
                     oreb += 10
                     dreb += 34
 
-            n = len(recent)
             fga_safe = max(1, fga)
             possessions = fga + 0.44 * fta - oreb + tov
             poss_safe = max(1.0, possessions)
+            ewma_denom = max(1e-5, ewma_weight_total)
 
             efg = (fgm + 0.5 * fg3m) / fga_safe
             tov_rate = tov / max(1.0, fga + 0.44 * fta + tov)
             pace = 48.0 * (possessions / (n * 48.0))
             ortg = 100.0 * (total_pts / poss_safe)
             drtg = 100.0 * (opp_pts / poss_safe)
+            orb_pct = oreb / max(1.0, oreb + dreb)
+            ft_rate = ftm / fga_safe
 
             return {
                 "win_rate": wins / n,
@@ -88,7 +99,12 @@ class BasketballFeatureEngine(BaseFeatureEngine):
                 "tov_rate": tov_rate,
                 "pace": pace,
                 "ortg": ortg,
-                "drtg": drtg
+                "drtg": drtg,
+                "net_rtg": ortg - drtg,
+                "ewma_pts": ewma_pts / ewma_denom,
+                "ewma_opp_pts": ewma_opp_pts / ewma_denom,
+                "orb_pct": orb_pct,
+                "ft_rate": ft_rate
             }
 
         h_stat = get_team_advanced_stats(home_id, home_matches, 10)
@@ -118,14 +134,22 @@ class BasketballFeatureEngine(BaseFeatureEngine):
             "away_pts_per_game": a_stat["pts_per_game"],
             "home_opp_pts": h_stat["opp_pts"],
             "away_opp_pts": a_stat["opp_pts"],
+            "home_ewma_pts": h_stat["ewma_pts"],
+            "away_ewma_pts": a_stat["ewma_pts"],
             "home_efg_pct": h_stat["efg_pct"],
             "away_efg_pct": a_stat["efg_pct"],
             "home_tov_rate": h_stat["tov_rate"],
             "away_tov_rate": a_stat["tov_rate"],
+            "home_orb_pct": h_stat["orb_pct"],
+            "away_orb_pct": a_stat["orb_pct"],
+            "home_ft_rate": h_stat["ft_rate"],
+            "away_ft_rate": a_stat["ft_rate"],
             "home_ortg": h_stat["ortg"],
             "away_ortg": a_stat["ortg"],
             "home_drtg": h_stat["drtg"],
             "away_drtg": a_stat["drtg"],
+            "home_net_rtg": h_stat["net_rtg"],
+            "away_net_rtg": a_stat["net_rtg"],
             "expected_pace": (h_stat["pace"] + a_stat["pace"]) / 2.0,
             "home_rest_days": h_rest,
             "away_rest_days": a_rest,
@@ -165,3 +189,4 @@ class BasketballFeatureEngine(BaseFeatureEngine):
             a_matches,
             as_of_timestamp
         )
+
